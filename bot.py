@@ -1,4 +1,5 @@
 #GigaChat
+from aiohttp.web_fileresponse import content_type
 from langchain.schema import HumanMessage, SystemMessage
 from langchain_gigachat.chat_models.gigachat import GigaChat
 
@@ -106,6 +107,11 @@ async def bot_response(message: types.Message, state: FSMContext) -> None:
     bot_result = "Запрос отправлен, но не тратиться API"
     print(bot_result)
     await message.reply(text=bot_result)
+
+#отправлено фото
+@dp.message(F.content_type.in_({'photo', 'voice'}))
+async def bot_photo(message: types.Message) -> None:
+    await message.reply("Бот не умеет обрабатывать изображения и голосовые сообщения")
 
 
 #если команды нет и не в состоянии
