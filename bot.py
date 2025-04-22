@@ -11,6 +11,7 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.filters import CommandStart, Command
+from aiogram.fsm.storage.memory import MemoryStorage
 
 # Other libs
 import asyncio
@@ -44,7 +45,7 @@ logging.basicConfig(level=logging.INFO)
 # Объект бота
 bot = Bot(token=token)
 # Диспетчер
-dp = Dispatcher()
+dp = Dispatcher(storage=MemoryStorage())
 
 giga = GigaChat(
         # Для авторизации запросов используйте ключ, полученный в проекте GigaChat API
@@ -66,14 +67,26 @@ kb_start = [
         ],
     ]
 
+welcome_message = (
+    "Привет! 👋 Я — твой чат-бот для ментальной поддержки.\n"
+    "Здесь ты можешь поговорить, получить советы по самоощущению и просто немного выдохнуть.\n\n"
+    "Чтобы начать, можешь воспользоваться экранной клавиатурой Telegram —\n"
+    "внизу экрана ты увидишь удобные кнопки с командами.\n"
+    "Просто нажимай на нужную, и я помогу тебе дальше. 💬\n\n"
+    "Ты не один — я рядом. Готов начать, когда ты будешь готов 🌱"
+)
+
+
 class UserState(StatesGroup):
     waiting_for_response = State()
 
 # Базовый хэндлер при старте бота
 @dp.message(Command("start"))
-async def cmd_start(message: types.Message) -> None:
+async def cmd_start(message: types.Message, state: FSMContext) -> None:
+    if await state.get_state() == UserState.waiting_for_response:
+        await state.clear()
     markup = types.ReplyKeyboardMarkup(keyboard=kb_start, resize_keyboard=True)
-    await message.answer("Привет, я бот, пока умею только анекдот, хочешь анекдот?",reply_markup=markup)
+    await message.answer(text=welcome_message,reply_markup=markup)
 
 # Хэндлер показывает возможности бота
 @dp.message(Command("help"))
@@ -145,6 +158,7 @@ async def cmd_mental_giga_help(message: types.Message, state: FSMContext) -> Non
 
     await message.reply(text="Что вас тревожит?", reply_markup=markup)
     await state.set_state(UserState.waiting_for_response)
+    await state.update_data(dialog=[])
 
 # Остановка состояния(выход)
 @dp.message(UserState.waiting_for_response, F.text.casefold() == "стоп")
@@ -157,10 +171,18 @@ async def bot_stop(message: types.Message, state: FSMContext) -> None:
 @dp.message(UserState.waiting_for_response)
 async def bot_response(message: types.Message, state: FSMContext) -> None:
     user_text = message.text
-    #bot_result = await MentalResponse.gigachat_response(user_text, giga)
-    bot_result = "Запрос отправлен, но не тратиться API"
+
+    data = await state.get_data()
+    dialog = data.get("dialog", [])
+    print(dialog)
+
+    bot_result = await MentalResponse.gigachat_response(user_text, giga, dialog)
+
+    dialog.append({"user": user_text, "bot": bot_result})
+
     print(bot_result)
     await message.reply(text=bot_result)
+
 
 # Отправлено фото или голсовое
 @dp.message(F.content_type.in_({'photo', 'voice'}))
